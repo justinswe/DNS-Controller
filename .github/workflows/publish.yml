@@ -92,6 +92,13 @@ jobs:
             echo "impacted=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Configure Docker credential path
+        if: steps.impact.outputs.impacted == 'true'
+        shell: bash
+        run: |
+          mkdir --parents "${RUNNER_TEMP}/docker-config"
+          echo "DOCKER_CONFIG=${RUNNER_TEMP}/docker-config" >> "${GITHUB_ENV}"
+
       - name: Verify Docker Hub repository
         if: steps.impact.outputs.impacted == 'true'
         env:
@@ -146,8 +153,14 @@ jobs:
 
       - name: Publish version tag
         if: steps.impact.outputs.impacted == 'true'
-        run: bazel run --stamp //:image_push
+        run: |
+          bazel run --stamp \
+            --@rules_img//img/settings:docker_config_path="${DOCKER_CONFIG}/config.json" \
+            //:image_push
 
       - name: Publish latest tag
         if: steps.impact.outputs.impacted == 'true'
-        run: bazel run --stamp //:image_push_latest
+        run: |
+          bazel run --stamp \
+            --@rules_img//img/settings:docker_config_path="${DOCKER_CONFIG}/config.json" \
+            //:image_push_latest

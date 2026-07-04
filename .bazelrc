@@ -1,0 +1,26 @@
+
+# Tell Bazel to not detect the CC toolchain automatically from the host machine to improve hermeticity.
+# This requires you to declare and register a CC toolchain explicitly.
+common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+# Downloading from the registry less flaky
+common --experimental_repository_downloader_retries=10
+common --http_connector_attempts=10
+common --http_connector_retry_max_timeout=60s
+
+common:ci --announce_rc
+common --nobuild_runfile_links
+
+##############################
+###  rules_img Configs     ###
+##############################
+common --@rules_img//img/settings:compress=zstd
+common --@rules_img//img/settings:compression_jobs=auto
+common --@rules_img//img/settings:compression_level=auto
+common --@rules_img//img/settings:estargz=disabled
+common --@rules_img//img/settings:create_parent_directories=disabled
+common --@rules_img//img/settings:layer_tree_artifact_handling=full
+common --@rules_img//img/settings:runfiles_sharing_mode=auto
+common --@rules_img//img/settings:stamp=disabled
+common --@rules_img//img/settings:load_daemon=docker
+common --@rules_img//img/settings:load_strategy=eager
