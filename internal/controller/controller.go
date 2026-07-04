@@ -14,90 +14,104 @@ import (
 	"go.uber.org/zap"
 )
 
-type Record struct {
-	ID         string `mapstructure:"id"`
-	RecordType string `mapstructure:"recordType"`
-	Name       string `mapstructure:"name"`
-}
-
-type Config struct {
-	Records []Record `mapstructure:"records"`
+// CloudflareConfig contains credentials used to authenticate with Cloudflare.
+// Exactly one of APIToken or APIKey must be set. Email is required with APIKey.
+type CloudflareConfig struct {
+	APIToken string
+	APIKey   string
+	Email    string
 }
 
 type Controller struct {
 	httpClient *http.Client
+	apiToken   string
 	apiKey     string
 	apiEmail   string
 	baseURL    string
-	authType   string
 }
 
 const (
 	perPage float64 = 100.0
 )
 
-func NewController(cloudflareKey, email, authType string) (*Controller, error) {
-	if strings.TrimSpace(cloudflareKey) == "" {
-		return nil, errors.New("cloudflare key or token is required")
+// NewController constructs a Cloudflare DNS controller.
+func NewController(config CloudflareConfig) (*Controller, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
-	at := strings.ToLower(strings.TrimSpace(authType))
-	if at == "" {
-		if strings.TrimSpace(email) != "" {
-			at = "key"
-		} else {
-			at = "token"
-		}
-	}
-	if at == "key" && strings.TrimSpace(email) == "" {
-		return nil, errors.New("cloudflare email is required when using auth type 'key'")
-	}
+
+	apiToken := strings.TrimSpace(config.APIToken)
+	apiKey := strings.TrimSpace(config.APIKey)
+	email := strings.TrimSpace(config.Email)
+
 	return &Controller{
 		httpClient: &http.Client{Timeout: 15 * time.Second},
-		apiKey:     cloudflareKey,
+		apiToken:   apiToken,
+		apiKey:     apiKey,
 		apiEmail:   email,
 		baseURL:    "https://api.cloudflare.com/client/v4",
-		authType:   at,
 	}, nil
 }
 
-// Handle checks if DNS records match the current public IP and updates them if needed
-func (c *Controller) Handle(ctx context.Context, config Config) error {
-	// Get current public IP
-	currentIP, err := c.getPublicIP()
+// Validate checks whether the Cloudflare credentials select one supported
+// authentication method.
+func (config CloudflareConfig) Validate() error {
+	apiToken := strings.TrimSpace(config.APIToken)
+	apiKey := strings.TrimSpace(config.APIKey)
+	email := strings.TrimSpace(config.Email)
+	hasToken := apiToken != ""
+	hasKey := apiKey != ""
+	if hasToken == hasKey {
+		return errors.New("exactly one of cloudflare API token or API key is required")
+	}
+	if hasKey && email == "" {
+		return errors.New("cloudflare email is required with an API key")
+	}
+	if hasToken && email != "" {
+		return errors.New("cloudflare email cannot be used with an API token")
+	}
+	return nil
+}
+
+// Handle ensures the configured A records contain the current public IP address.
+func (c *Controller) Handle(ctx context.Context, records []string) error {
+	currentIP, err := c.getPublicIP(ctx)
 	if err != nil {
 		return err
 	}
 	zap.L().Info("Current IP retrieved", zap.String("ip", currentIP))
 
-	for _, cfg := range config.Records {
-		if cfg.Name == "" {
+	for _, record := range records {
+		name := strings.TrimSpace(record)
+		if name == "" {
 			return errors.New("record name is required")
 		}
-		if strings.ToUpper(cfg.RecordType) != "A" {
-			zap.L().Info("Skipping non-A record type", zap.String("name", cfg.Name), zap.String("type", cfg.RecordType))
-			continue
-		}
-		zap.L().Info("Processing record", zap.String("id", cfg.ID), zap.String("type", cfg.RecordType), zap.String("name", cfg.Name))
-		if err := c.ensureARecord(ctx, cfg, currentIP); err != nil {
+		zap.L().Info("Processing A record", zap.String("name", name))
+		if err := c.ensureARecord(ctx, name, currentIP); err != nil {
 			return err
 		}
 	}
 
-	return nil // Return nil when processing completes successfully
+	return nil
 }
 
-// getPublicIP retrieves the current public IP address of the machine
-func (c *Controller) getPublicIP() (string, error) {
-	// Using a service that returns the public IP
-	resp, err := http.Get("https://api.ipify.org")
+func (c *Controller) getPublicIP(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.ipify.org", nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("create public IP request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("retrieve public IP: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("retrieve public IP: unexpected status %d", resp.StatusCode)
+	}
 
 	ip, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("read public IP response: %w", err)
 	}
 
 	return strings.TrimSpace(string(ip)), nil
@@ -155,39 +169,35 @@ type cfUpdateDNSRecordRequest struct {
 	Proxied bool   `json:"proxied"`
 }
 
-func (c *Controller) ensureARecord(ctx context.Context, rec Record, ip string) error {
-	zoneID := strings.TrimSpace(rec.ID)
-	if zoneID == "" {
-		apex := apexFromFQDN(rec.Name)
-		zid, err := c.getZoneIDByName(ctx, apex)
-		if err != nil {
-			return err
-		}
-		zoneID = zid
+func (c *Controller) ensureARecord(ctx context.Context, name, ip string) error {
+	apex := apexFromFQDN(name)
+	zoneID, err := c.getZoneIDByName(ctx, apex)
+	if err != nil {
+		return err
 	}
 
-	existing, err := c.findARecord(ctx, zoneID, rec.Name)
+	existing, err := c.findARecord(ctx, zoneID, name)
 	if err != nil {
 		return err
 	}
 
 	if existing == nil {
-		if err := c.createARecord(ctx, zoneID, rec.Name, ip); err != nil {
+		if err := c.createARecord(ctx, zoneID, name, ip); err != nil {
 			return err
 		}
-		zap.L().Info("Created A record", zap.String("name", rec.Name), zap.String("ip", ip), zap.String("zone", zoneID))
+		zap.L().Info("Created A record", zap.String("name", name), zap.String("ip", ip), zap.String("zone", zoneID))
 		return nil
 	}
 
 	if existing.Content == ip {
-		zap.L().Info("A record already up to date; no update needed", zap.String("name", rec.Name), zap.String("ip", ip))
+		zap.L().Info("A record already up to date; no update needed", zap.String("name", name), zap.String("ip", ip))
 		return nil
 	}
 
-	if err := c.updateARecord(ctx, zoneID, existing.ID, rec.Name, ip); err != nil {
+	if err := c.updateARecord(ctx, zoneID, existing.ID, name, ip); err != nil {
 		return err
 	}
-	zap.L().Info("Updated A record", zap.String("name", rec.Name), zap.String("old_ip", existing.Content), zap.String("new_ip", ip), zap.String("zone", zoneID))
+	zap.L().Info("Updated A record", zap.String("name", name), zap.String("old_ip", existing.Content), zap.String("new_ip", ip), zap.String("zone", zoneID))
 	return nil
 }
 
@@ -287,8 +297,8 @@ func (c *Controller) updateARecord(ctx context.Context, zoneID, recordID, fqdn, 
 }
 
 func (c *Controller) addAuthHeaders(req *http.Request) {
-	if c.authType == "token" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiToken)
 	} else {
 		req.Header.Set("X-Auth-Email", c.apiEmail)
 		req.Header.Set("X-Auth-Key", c.apiKey)
