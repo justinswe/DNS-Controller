@@ -15,7 +15,7 @@ import (
 
 const (
 	serviceName      = "dns-controller"
-	shortDescription = "DNS Controller for managing DNS records"
+	shortDescription = "DNS Controller for managing DNS records."
 	longDescription  = `DNS Controller manages Cloudflare A records for networks without a static public IP address.`
 )
 

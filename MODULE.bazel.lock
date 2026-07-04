@@ -230,7 +230,7 @@
     "//third_party/images:images.bzl%images": {
       "general": {
         "bzlTransitiveDigest": "QarGnYuOv+e0zcegzLgXf72+SC9lguSGRn25sdbavE0=",
-        "usagesDigest": "Gqh512dj2WwByMavSiPlzKTbsoafyJpWCPPy3fqP6M0=",
+        "usagesDigest": "UMT0fT2BFXTaR0eq8mZPaq+w2mpJDONVu5GqjxJMfqk=",
         "recordedInputs": [
           "REPO_MAPPING:,rules_img rules_img+",
           "REPO_MAPPING:rules_img+,bazel_skylib bazel_skylib+",
@@ -530,7 +530,7 @@
     "@@toolchains_buildbuddy+//:extensions.bzl%buildbuddy": {
       "general": {
         "bzlTransitiveDigest": "YThiSErJv+jiCHJzZIEyk0yegQRS/x+T/ce309eGTvA=",
-        "usagesDigest": "8tZEMAYz/ueZan8mk5quhWizmiHLUf9G2cjYXDx5B2g=",
+        "usagesDigest": "JHUdPjOMVf0/wfPeo4bjzaUswWaFpZx/UPkRuZ5uLyU=",
         "recordedInputs": [],
         "generatedRepoSpecs": {
           "buildbuddy_toolchain": {
