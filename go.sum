@@ -13,6 +13,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/justinswe/std v0.1.0 h1:OYFMdrB9NYDBrXwwReHvJHXq9vAE88iFNERUwiE+kmA=
 github.com/justinswe/std v0.1.0/go.mod h1:sJ57mdUEU22jPQHmvdl92W2DNLaM+Q/3RPKk+9MzhvY=
+github.com/justinswe/std v1.0.0 h1:PpFC+fFTDJTfMQ7XNk/nhmge2QrMcEahMu1SbXQXwWQ=
+github.com/justinswe/std v1.0.0/go.mod h1:BDCv+nnmRnpPby8BCpIKX5z5z8TWgIj5ur7xYBaFsY4=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=

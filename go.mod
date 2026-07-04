@@ -3,7 +3,7 @@ module github.com/justinswe/dns-controller
 go 1.26.4
 
 require (
-	github.com/justinswe/std v0.1.0
+	github.com/justinswe/std v1.0.0
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
 )
