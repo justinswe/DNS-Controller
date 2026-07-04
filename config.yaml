@@ -1,0 +1,5 @@
+records:
+  - recordType: "A"
+    name: "media.ju2tin.dev"
+  - recordType: "A"
+    name: "vpn.ju2tin.dev"
