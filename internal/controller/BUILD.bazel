@@ -1,0 +1,15 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "controller",
+    srcs = ["controller.go"],
+    importpath = "github.com/justinswe/dns-controller/internal/controller",
+    visibility = ["//:__subpackages__"],
+    deps = ["@org_uber_go_zap//:zap"],
+)
+
+go_test(
+    name = "controller_test",
+    srcs = ["controller_test.go"],
+    embed = [":controller"],
+)

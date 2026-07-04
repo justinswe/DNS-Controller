@@ -1,0 +1,68 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("//tools/container/go:defs.bzl", "go_container_image")
+
+MODULE_VERSION = module_version()
+
+gazelle(
+    name = "gazelle",
+)
+
+go_library(
+    name = "dns-controller_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/justinswe/dns-controller",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//internal/controller",
+        "@com_github_justinswe_std//app",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_viper//:viper",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "dns-controller",
+    embed = [":dns-controller_lib"],
+    pure = "on",
+    visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/justinswe/dns-controller.version": MODULE_VERSION,
+    },
+)
+
+go_test(
+    name = "dns-controller_test",
+    srcs = ["main_test.go"],
+    embed = [":dns-controller_lib"],
+    deps = [
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zaptest/observer",
+    ],
+)
+
+platform(
+    name = "linux_amd64",
+    constraint_values = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+)
+
+go_container_image(
+    name = "image",
+    base = "@distroless_base_debian13_nonroot",
+    binary = ":dns-controller",
+    files = {
+        "/app/config.yaml": "config.yaml",
+    },
+    platform = ":linux_amd64",
+    registry = "index.docker.io",
+    repository = "justinswe/dns-controller",
+    additional_tags = {
+        "latest": "latest",
+    },
+    tag = MODULE_VERSION,
+    visibility = ["//visibility:public"],
+)

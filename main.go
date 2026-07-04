@@ -1,117 +1,142 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"os"
+	"log"
 	"strings"
 
+	"github.com/justinswe/dns-controller/internal/controller"
+	"github.com/justinswe/std/app"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 const (
-	svcName 	   = "dns-controller"
+	svcName          = "dns-controller"
 	shortDescription = "DNS Controller for managing DNS records"
 	longDescription  = `DNS Controller is a tool for managing DNS records through various providers like Cloudflare.`
 )
 
 var (
-    cfgFile       string
-    cloudflareKey string
+	version = "development"
+
+	command = &cobra.Command{
+		Use:   svcName,
+		Short: shortDescription,
+		Long:  longDescription,
+		RunE:  run,
+	}
+
+	cfgFile         string
+	cloudflareKey   string
+	cloudflareEmail string
+	cloudflareAuth  string
 )
 
-var rootCmd = &cobra.Command{
-    Use:   svcName,
-    Short: shortDescription,
-	Long:  longDescription,
-    PersistentPreRun: persistPreRun,
-    Run: run,
-}
-
-func persistPreRun(cmd *cobra.Command, args []string) {
-	// If cloudflareKey wasn't set by flag, try to get it from viper
-	if cloudflareKey == "" {
-		cloudflareKey = viper.GetString("cloudflare_key")
-	}
-	
-	// Validate required configuration
-	if cloudflareKey == "" {
-		fmt.Fprintln(os.Stderr, "Error: Cloudflare API key not provided")
-		fmt.Fprintln(os.Stderr, "Please set it using --cloudflare-key flag, DNS_CONTROLLER_CLOUDFLARE_KEY environment variable, or in the config file")
-		os.Exit(1)
-	}
-}
-
 func init() {
-    cobra.OnInitialize(initConfig)
+	command.AddCommand(newVersionCommand())
 
-    rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default same directory as binary)")
-    rootCmd.PersistentFlags().StringVar(&cloudflareKey, "cloudflare-key", "", "Cloudflare API key")
+	command.Flags().StringVar(&cfgFile, "config", "config.yaml", "config file containing DNS records")
+	command.Flags().StringVar(&cloudflareKey, "cloudflare-key", "", "Cloudflare API key")
+	command.Flags().StringVar(&cloudflareEmail, "cloudflare-email", "fernbaughj@gmail.com", "Cloudflare account email")
+	command.Flags().StringVar(&cloudflareAuth, "cloudflare-auth-type", "token", "Cloudflare auth type: 'token' or 'key' (default inferred)")
+
+	_ = viper.BindPFlags(command.Flags())
 }
 
-func initConfig() {
-    // Don't forget to bind the flag to viper
-    viper.BindPFlag("cloudflare_key", rootCmd.PersistentFlags().Lookup("cloudflare-key"))
-    viper.SetDefault("cloudflare_key", "")
-    viper.AutomaticEnv()
-    viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
-
-    // Use config file from the flag if specified
-    if cfgFile != "" {
-        viper.SetConfigFile(cfgFile)
-    } else {
-        // Search config in various locations
-        viper.AddConfigPath(".")
-    }
-
-    // Read in config
-    if err := viper.ReadInConfig(); err == nil {
-        fmt.Println("Using config file:", viper.ConfigFileUsed())
-    }
-}
-
-func run(cmd *cobra.Command, args []string) {
-    // Main application logic
-    fmt.Println("DNS Controller starting...")
-
-    debugCfg()
-
-    // todo insert logic
-}
-
-func debugCfg() {
-	// Read the yaml config file
-    fmt.Println("Configuration settings:")
-    fmt.Println("------------------------")
-    
-    // Get all settings from viper
-    allSettings := viper.AllSettings()
-    if len(allSettings) == 0 {
-        fmt.Println("No configuration settings found")
-		os.Exit(1)
-    }
-	for key, value := range allSettings {
-		if key == "cloudflare_key" {
-			continue
-		}
-		fmt.Printf("%s: %v\n", key, value)
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the dns-controller version",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), version)
+			return err
+		},
 	}
-    fmt.Println("------------------------")
-    fmt.Printf("Using Cloudflare API key: %s\n", maskAPIKey(cloudflareKey))
 }
 
-// Helper function to mask API key for display
-func maskAPIKey(key string) string {
-    if len(key) <= 4 {
-        return "****"
-    }
-    visible := 4 // Show last 4 characters
-    return strings.Repeat("*", len(key)-visible) + key[len(key)-visible:]
+func validateConfig() error {
+	if cloudflareKey == "" {
+		return errors.New("cloudflare API key/token not provided")
+	}
+	authType := strings.ToLower(strings.TrimSpace(cloudflareAuth))
+	if authType != "token" && cloudflareEmail == "" {
+		return errors.New("cloudflare email not provided when auth type is not token")
+	}
+	return nil
+}
+
+func run(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
+	if err := validateConfig(); err != nil {
+		return err
+	}
+
+	logStartup()
+
+	records, err := readCfg()
+	if err != nil {
+		return errors.Join(err, errors.New("failed to read config"))
+	}
+
+	ctrl, err := controller.NewController(cloudflareKey, cloudflareEmail, cloudflareAuth)
+	if err != nil {
+		return err
+	}
+
+	if err = ctrl.Handle(ctx, records); err != nil {
+		return errors.Join(err, errors.New("failed to check DNS record"))
+	}
+
+	return nil
+}
+
+func logStartup() {
+	zap.L().Info("DNS Controller starting...", zap.String("version", version))
+}
+
+func readCfg() (controller.Config, error) {
+	v := viper.New()
+	if cfgFile != "" {
+		v.SetConfigFile(cfgFile)
+	} else {
+		return controller.Config{}, errors.New("config file path is required")
+	}
+
+	if err := v.ReadInConfig(); err != nil {
+		return controller.Config{}, fmt.Errorf("failed to read config file %s: %w", cfgFile, err)
+	}
+
+	zap.L().Info("Using config file", zap.String("file", v.ConfigFileUsed()))
+
+	var config controller.Config
+	if err := v.Unmarshal(&config); err != nil {
+		return controller.Config{}, fmt.Errorf("unable to decode config into struct: %w", err)
+	}
+
+	zap.L().Info("Configuration loaded", zap.Int("records_count", len(config.Records)))
+	for _, record := range config.Records {
+		zap.L().Debug("Loaded record",
+			zap.String("id", record.ID),
+			zap.String("type", record.RecordType),
+			zap.String("name", record.Name))
+	}
+
+	zap.L().Debug("Cloudflare auth configured")
+	if cloudflareEmail != "" {
+		zap.L().Info("Cloudflare email configured", zap.String("email", cloudflareEmail))
+	}
+
+	return config, nil
 }
 
 func main() {
-    if err := rootCmd.Execute(); err != nil {
-        fmt.Fprintln(os.Stderr, err)
-        os.Exit(1)
-    }
+	if err := app.RunCobraCommand(context.Background(), command); err != nil {
+		log.Fatal(err)
+	}
 }
