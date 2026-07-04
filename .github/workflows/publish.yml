@@ -12,6 +12,10 @@ jobs:
   publish:
     runs-on: ubuntu-24.04
 
+    env:
+      DOCKERHUB_REGISTRY: index.docker.io
+      DOCKERHUB_REPOSITORY: justinswe/dns-controller
+
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7
@@ -88,13 +92,57 @@ jobs:
             echo "impacted=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Verify Docker Hub repository
+        if: steps.impact.outputs.impacted == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DOCKERHUB_USERNAME}" ]]; then
+            echo "Repository variable DOCKERHUB_USERNAME is not configured." >&2
+            exit 1
+          fi
+
+          status="$({ curl --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            "https://hub.docker.com/v2/repositories/${DOCKERHUB_REPOSITORY}/"; } || true)"
+          if [[ "${status}" != "200" ]]; then
+            echo "Docker Hub repository ${DOCKERHUB_REPOSITORY} is unavailable (HTTP ${status}). Create it and grant ${DOCKERHUB_USERNAME} write access." >&2
+            exit 1
+          fi
+
       - name: Log in to Docker Hub
         if: steps.impact.outputs.impacted == 'true'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # 4.4.0
         with:
-          registry: index.docker.io
-          username: justinswe
+          registry: ${{ env.DOCKERHUB_REGISTRY }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Verify Docker Hub push authorization
+        if: steps.impact.outputs.impacted == 'true'
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status="$({ curl --silent --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --user "${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}" \
+            --get \
+            --data-urlencode 'service=registry.docker.io' \
+            --data-urlencode "scope=repository:${DOCKERHUB_REPOSITORY}:push,pull" \
+            https://auth.docker.io/token; } || true)"
+          if [[ "${status}" != "200" ]]; then
+            echo "Docker Hub denied push access to ${DOCKERHUB_REPOSITORY} (HTTP ${status}). Check the repository namespace and token permissions." >&2
+            exit 1
+          fi
 
       - name: Publish version tag
         if: steps.impact.outputs.impacted == 'true'

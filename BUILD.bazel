@@ -17,7 +17,6 @@ go_library(
         "//internal/controller",
         "@com_github_justinswe_std//app",
         "@com_github_spf13_cobra//:cobra",
-        "@com_github_spf13_viper//:viper",
         "@org_uber_go_zap//:zap",
     ],
 )
@@ -52,17 +51,14 @@ platform(
 
 go_container_image(
     name = "image",
-    base = "@distroless_base_debian13_nonroot",
-    binary = ":dns-controller",
-    files = {
-        "/app/config.yaml": "config.yaml",
-    },
-    platform = ":linux_amd64",
-    registry = "index.docker.io",
-    repository = "justinswe/dns-controller",
     additional_tags = {
         "latest": "latest",
     },
+    base = "@distroless_base_debian13_nonroot",
+    binary = ":dns-controller",
+    platform = ":linux_amd64",
+    registry = "index.docker.io",
+    repository = "justinswe/dns-controller",
     tag = MODULE_VERSION,
     visibility = ["//visibility:public"],
 )

@@ -1,24 +1,83 @@
 package controller
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+)
 
 func TestNewControllerValidation(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewController("", "", "token"); err == nil {
-		t.Fatal("NewController() accepted an empty API token")
+	tests := []struct {
+		name    string
+		config  CloudflareConfig
+		wantErr bool
+	}{
+		{name: "API token", config: CloudflareConfig{APIToken: "token"}},
+		{name: "API key", config: CloudflareConfig{APIKey: "key", Email: "owner@example.com"}},
+		{name: "empty credentials", config: CloudflareConfig{}, wantErr: true},
+		{name: "both credential types", config: CloudflareConfig{APIToken: "token", APIKey: "key"}, wantErr: true},
+		{name: "API key without email", config: CloudflareConfig{APIKey: "key"}, wantErr: true},
+		{name: "API token with email", config: CloudflareConfig{APIToken: "token", Email: "owner@example.com"}, wantErr: true},
 	}
 
-	if _, err := NewController("api-key", "", "key"); err == nil {
-		t.Fatal("NewController() accepted key authentication without an email")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NewController(test.config)
+			if test.wantErr && err == nil {
+				t.Fatal("NewController() accepted invalid credentials")
+			}
+			if !test.wantErr && err != nil {
+				t.Fatalf("NewController() returned an unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestAddAuthHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		config     CloudflareConfig
+		wantHeader http.Header
+	}{
+		{
+			name:       "API token",
+			config:     CloudflareConfig{APIToken: "token"},
+			wantHeader: http.Header{"Authorization": []string{"Bearer token"}},
+		},
+		{
+			name:   "API key",
+			config: CloudflareConfig{APIKey: "key", Email: "owner@example.com"},
+			wantHeader: http.Header{
+				"X-Auth-Email": []string{"owner@example.com"},
+				"X-Auth-Key":   []string{"key"},
+			},
+		},
 	}
 
-	controller, err := NewController("api-token", "", "token")
-	if err != nil {
-		t.Fatalf("NewController() returned an unexpected error: %v", err)
-	}
-	if controller.authType != "token" {
-		t.Fatalf("NewController() authType = %q, want token", controller.authType)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl, err := NewController(test.config)
+			if err != nil {
+				t.Fatalf("NewController() returned an unexpected error: %v", err)
+			}
+			req, err := http.NewRequest(http.MethodGet, "https://example.com", nil)
+			if err != nil {
+				t.Fatalf("create request: %v", err)
+			}
+			ctrl.addAuthHeaders(req)
+			for name, values := range test.wantHeader {
+				if got, want := req.Header.Values(name), values; len(got) != 1 || got[0] != want[0] {
+					t.Errorf("header %s = %v, want %v", name, got, want)
+				}
+			}
+		})
 	}
 }
 
