@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dns-controller
+spec:
+  schedule: "*/15 * * * *" # Run every 15 minutes
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: dns-controller
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: dns-controller
+              # Replace with the actual image registry and name once built
+              image: us-west1-docker.pkg.dev/justin-dev-00/justin/dns-controller:latest
+              imagePullPolicy: Always
+              args:
+                - "--config=/app/config.yaml"
+              env:
+                - name: CLOUDFLARE_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: cloudflare-key
+                      key: api-token
+              # Uncomment if you are using an API Key instead of a Token
+              # - name: CLOUDFLARE_EMAIL
+              #   valueFrom:
+              #     secretKeyRef:
+              #       name: cloudflare-key
+              #       key: email
+
