@@ -22,14 +22,14 @@ Home networks and self-hosted services rarely get a static public address. DNS C
 
 ## Features
 
-| Capability | What it does |
-| --- | --- |
-| **Cloudflare A records** | Manages one or more FQDNs per run through the Cloudflare v4 REST API. Records are written with a 300-second TTL and `proxied: false`. |
-| **Create or update** | Creates the A record when it does not exist yet, updates it when the address changed, and makes no write at all when the record already holds the current IP. |
-| **Two auth methods** | A scoped API token, or a global API key paired with the account email. Exactly one method is accepted. |
+| Capability               | What it does                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cloudflare A records** | Manages one or more FQDNs per run through the Cloudflare v4 REST API. Records are written with a 300-second TTL and `proxied: false`.                                                                         |
+| **Create or update**     | Creates the A record when it does not exist yet, updates it when the address changed, and makes no write at all when the record already holds the current IP.                                                 |
+| **Two auth methods**     | A scoped API token, or a global API key paired with the account email. Exactly one method is accepted.                                                                                                        |
 | **Flags or environment** | Every flag is also read from an uppercase, underscore-separated environment variable by the shared `github.com/justinswe/std/app` runtime, so the same binary configures cleanly from a shell or a container. |
-| **One-shot by design** | Performs a single reconciliation and exits, so scheduling stays with whatever already runs on a timer: cron, systemd, or a Kubernetes `CronJob`. No daemon, no internal ticker. |
-| **Small image** | A pure-Go static binary on a digest-pinned `distroless/base-debian13:nonroot` base, running as a non-root user. Published for `linux/amd64`. |
+| **One-shot by design**   | Performs a single reconciliation and exits, so scheduling stays with whatever already runs on a timer: cron, systemd, or a Kubernetes `CronJob`. No daemon, no internal ticker.                               |
+| **Small image**          | A pure-Go static binary on a digest-pinned `distroless/base-debian13:nonroot` base, running as a non-root user. Published for `linux/amd64`.                                                                  |
 
 ## Quick start
 
@@ -108,12 +108,12 @@ One run resolves the public IP address once from `api.ipify.org`, then processes
 
 ## Configuration
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `RECORDS` | Yes | Comma-separated A record FQDNs to manage. The `--records` flag is also repeatable. |
-| `CLOUDFLARE_API_TOKEN` | One auth method | Scoped API token, sent as a bearer token. |
-| `CLOUDFLARE_API_KEY` | One auth method | Global API key, sent with the account email. |
-| `CLOUDFLARE_EMAIL` | With an API key | Cloudflare account email. Required with a global API key, and rejected with a token. |
+| Variable               | Required        | Purpose                                                                              |
+| ---------------------- | --------------- | ------------------------------------------------------------------------------------ |
+| `RECORDS`              | Yes             | Comma-separated A record FQDNs to manage. The `--records` flag is also repeatable.   |
+| `CLOUDFLARE_API_TOKEN` | One auth method | Scoped API token, sent as a bearer token.                                            |
+| `CLOUDFLARE_API_KEY`   | One auth method | Global API key, sent with the account email.                                         |
+| `CLOUDFLARE_EMAIL`     | With an API key | Cloudflare account email. Required with a global API key, and rejected with a token. |
 
 Every non-repeatable flag is also available as an uppercase environment variable with hyphens replaced by underscores — `--cloudflare-api-token` maps to `CLOUDFLARE_API_TOKEN`. Run with `--help` to see all options, or `version` to print the build version.
 
@@ -155,8 +155,6 @@ Run the test suite:
 ```sh
 bazel test //...
 ```
-
-Presubmit and publishing both run on [BuildBuddy](https://buildbuddy.io) via `buildbuddy.yaml`; there are no GitHub Actions. Pull requests to `main` are tested with remote build execution and must bump `version` in `MODULE.bazel` to a newer canonical `MAJOR.MINOR.PATCH` — presubmit fails otherwise. Merging to `main` re-runs the tests and then publishes `justinswe/dns-controller:<version>` and `justinswe/dns-controller:latest`, so the module version is the release version.
 
 ## License
 
