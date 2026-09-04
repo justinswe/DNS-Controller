@@ -136,7 +136,7 @@ dns-controller \
 
 ## Run from source
 
-The build is Bazel-only and hermetic; no local Go toolchain is required.
+The build is Bazel-only and hermetic. No local Go toolchain is required. Building on macOS requires macOS 13 Ventura or later.
 
 ```sh
 bazel run //:dns-controller -- --help

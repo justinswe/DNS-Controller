@@ -1,6 +1,6 @@
 module github.com/justinswe/dns-controller
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/justinswe/std v1.0.0
